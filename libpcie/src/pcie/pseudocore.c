@@ -280,7 +280,11 @@ static int mem_read(pcie_state_t *state,
       }
       else {
         data_word = pcie_hw_msix_r32(state, fn, addr);
+        rd_data->buf.ptr = checked_calloc(rd_data->buf.len * sizeof(uint32_t));
         *rd_data->buf.ptr = data_word;
+        tlp_info->tlp_type = TLP0_TYPE_CPL;
+        tlp_info->tlp_fmt = TLP0_FMT_3DW_DATA;
+        tlp_info->cpl_status = TLP1_COMPL_STATUS_SC;
       }
 
       /** TODO: Since MSIX is not yet using  tlp_info, free it
@@ -414,7 +418,7 @@ static void complete_read_from_host(pcie_state_t *state,
   int data[4];
   int eop = (num_dwords == 0) ? 1 : 0;
   int i, is_first;
-  tlp_data_t rd_data;
+  tlp_data_t rd_data = {0};
   bool done = true;
   uint64_t addr = to_addr64(tlp_info->addr_hi, tlp_info->addr_lo);
 
@@ -518,6 +522,10 @@ static void complete_read_from_host(pcie_state_t *state,
     free(tlp_info);
     tlp_info = NULL;
   }
+
+  /* Free the buffer allocated in MSIx Mem reads */
+  if (rd_data.is_buf_data)
+    free(rd_data.buf.ptr);
 
   SEND_UNLOCK(state);
 }
