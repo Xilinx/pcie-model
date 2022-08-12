@@ -39,6 +39,8 @@ PCIeController::PCIeController(sc_core::sc_module_name name,
 	bar4_init_socket("bar4_init_socket"),
 	bar5_init_socket("bar5_init_socket"),
 
+	dma_tgt_socket("dma_tgt_socket"),
+
 	m_tx_event("tx-event"),
 	m_rx_event("rx-event"),
 
