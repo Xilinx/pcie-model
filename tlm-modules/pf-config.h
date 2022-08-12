@@ -131,6 +131,11 @@ public:
 	GEN_PCI_CFGSPC_FIELD_FUNCS(TableOffsetBIR, PCI_MSIX_TABLE, uint32_t);
 	GEN_PCI_CFGSPC_FIELD_FUNCS(PendingBitArray, PCI_MSIX_PBA, uint32_t);
 
+	uint16_t GetTableSize()
+	{
+		return (GetMessageControl() & PCI_MSIX_FLAGS_QSIZE) + 1;
+	}
+
 	int GetTableBIR()
 	{
 		uint32_t bir = GetTableOffsetBIR() & PCI_MSIX_TABLE_BIR;
@@ -270,6 +275,14 @@ public:
 	bool IsBARTypeMSIX(int bar)
 	{
 		return m_msixCopied && m_msixCap.GetTableBIR() == bar;
+	}
+
+	uint16_t GetNumIrqs()
+	{
+		if (m_msixCopied) {
+			return m_msixCap.GetTableSize();
+		}
+		return 0;
 	}
 
 	void *data() { return reinterpret_cast<void*>(m_config); }

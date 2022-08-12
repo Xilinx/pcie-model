@@ -68,6 +68,11 @@ public:
 	//
 	tlm_utils::simple_target_socket<PCIeController> dma_tgt_socket;
 
+	//
+	// User application interrupt (MSI-X) vector
+	//
+	sc_vector<sc_in<bool> > irq;
+
 	SC_HAS_PROCESS(PCIeController);
 
 	PCIeController(sc_core::sc_module_name name, PhysFuncConfig cfg);
@@ -97,6 +102,7 @@ public:
 
 	void PCIeHostReadDone();
 
+	void irq_thread(unsigned int i);
 private:
 	unsigned int GetHdrLen(uint8_t data);
 	void ByteSwap(uint8_t *data, unsigned int len);

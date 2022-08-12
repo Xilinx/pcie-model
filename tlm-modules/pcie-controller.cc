@@ -41,6 +41,8 @@ PCIeController::PCIeController(sc_core::sc_module_name name,
 
 	dma_tgt_socket("dma_tgt_socket"),
 
+	irq("irq", cfg.GetNumIrqs()),
+
 	m_tx_event("tx-event"),
 	m_rx_event("rx-event"),
 
@@ -58,6 +60,27 @@ PCIeController::PCIeController(sc_core::sc_module_name name,
 
 	SC_THREAD(prod_pcie_thread);
 	SC_THREAD(TLP_tx_thread);
+
+	for (unsigned int i = 0; i < irq.size(); i++) {
+		sc_spawn(sc_bind(&PCIeController::irq_thread,
+				this,
+				i));
+	}
+}
+
+void PCIeController::irq_thread(unsigned int i)
+{
+	pcie_func_t *func = fs_rid_to_func(m_pcie_state, 0);
+
+	if (!func) {
+		SC_REPORT_ERROR("PCIeController",
+				"Function not found when configuring MSI-X");
+	}
+
+	while (true) {
+		wait(irq[i].posedge_event());
+		pcie_hw_msix_irq(m_pcie_state, func, i);
+	}
 }
 
 void PCIeController::init()
