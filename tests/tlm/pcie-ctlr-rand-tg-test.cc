@@ -51,13 +51,15 @@ using namespace std;
 using namespace utils;
 
 #define NR_MASTERS	1
-#define NR_DEVICES	4
+#define NR_DEVICES	5
 
 #define PCI_VENDOR_ID_XILINX            (0x10ee)
 #define PCI_DEVICE_ID_XILINX_EF100      (0x0080)
 #define PCI_SUBSYSTEM_ID_XILINX_TEST    (0x000A)
 
 #define PCI_CLASS_BASE_NETWORK_CONTROLLER     (0x02)
+
+#define NUM_MSIX 8
 
 #define KiB (1024)
 #define MiB (1024 * KiB)
@@ -72,6 +74,8 @@ using namespace utils;
 #define BAR2_ADDR 0xfe000000
 #endif
 
+#define NUM_MSIX 8
+
 sc_event *tgDoneEvent;
 void tgDoneCB(TLMTrafficGenerator *gen, int threadId)
 {
@@ -79,6 +83,52 @@ void tgDoneCB(TLMTrafficGenerator *gen, int threadId)
 		tgDoneEvent->notify();
 	}
 }
+
+class MSIXDev
+: public sc_core::sc_module
+{
+public:
+	tlm_utils::simple_target_socket<MSIXDev> tgt_socket;
+	sc_vector<sc_out<bool> > irq;
+	sc_event m_irqevent;
+
+	SC_HAS_PROCESS(MSIXDev);
+
+	MSIXDev(sc_core::sc_module_name name, int n_irqs) :
+		sc_module(name),
+		tgt_socket("tgt-socket"),
+		irq("irq", n_irqs),
+		m_irqevent("irqevent")
+	{
+		tgt_socket.register_b_transport(this, &MSIXDev::b_transport);
+
+		SC_THREAD(irq_thread);
+	}
+
+	virtual void b_transport(tlm::tlm_generic_payload& trans,
+					sc_time& delay)
+	{
+		m_irqevent.notify();
+		trans.set_response_status(tlm::TLM_OK_RESPONSE);
+	}
+
+	void irq_thread()
+	{
+		while (true) {
+			wait(m_irqevent);
+
+			for (unsigned int i = 0; i < irq.size(); i++) {
+				irq[i].write(true);
+			}
+
+			wait(sc_time(1, SC_NS));
+
+			for (unsigned int i = 0; i < irq.size(); i++) {
+				irq[i].write(false);
+			}
+		}
+	}
+};
 
 TrafficDesc config_xfers(merge({
 	Read(0x0, 4),
@@ -153,11 +203,60 @@ TrafficDesc config_xfers(merge({
 	//
 	// Configure MSI-X
 	//
-	Write(0xd8, DATA(0x00, 0x80, 0x00, 0x80)),
-	ByteEnable(DATA(0x00, 0x00, 0xFF, 0xFF), 4),
+	Read(0xb0, 4),
+		Expect(DATA(0x11, 0x00, 0x07, 0x00), 4),
+	Write(0xb0, DATA(0x00, 0x80, 0x00, 0x80)),
+		ByteEnable(DATA(0x00, 0x00, 0xFF, 0xFF), 4),
+	Read(0xb0, 4),
+		Expect(DATA(0x11, 0x00, 0x07, 0x80), 4),
 
-	Write(0xfe040100, DATA(0x00, 0x00, 0x00, 0xb0)),
-	Write(0xfe040104, DATA(0xAA, 0xBB, 0xCC, 0xDD)),
+	// MSI-X Table entry 0
+	Write(0xfe040100, DATA(0x00, 0x00, 0x00, 0x00)),
+	Write(0xfe040104, DATA(0x00, 0x00, 0x00, 0x00)),
+	Write(0xfe040108, DATA(0x00, 0xBB, 0xCC, 0xDD)),
+	Write(0xfe04010c, DATA(0x00, 0x00, 0x00, 0x00)),
+
+	// MSI-X Table entry 1
+	Write(0xfe040110, DATA(0x04, 0x00, 0x00, 0x00)),
+	Write(0xfe040114, DATA(0x00, 0x00, 0x00, 0x00)),
+	Write(0xfe040118, DATA(0x11, 0xBB, 0xCC, 0xDD)),
+	Write(0xfe04011c, DATA(0x00, 0x00, 0x00, 0x00)),
+
+	// MSI-X Table entry 2
+	Write(0xfe040120, DATA(0x08, 0x00, 0x00, 0x00)),
+	Write(0xfe040124, DATA(0x00, 0x00, 0x00, 0x00)),
+	Write(0xfe040128, DATA(0x22, 0xBB, 0xCC, 0xDD)),
+	Write(0xfe04012c, DATA(0x00, 0x00, 0x00, 0x00)),
+
+	// MSI-X Table entry 3
+	Write(0xfe040130, DATA(0x0c, 0x00, 0x00, 0x00)),
+	Write(0xfe040134, DATA(0x00, 0x00, 0x00, 0x00)),
+	Write(0xfe040138, DATA(0x33, 0xBB, 0xCC, 0xDD)),
+	Write(0xfe04013c, DATA(0x00, 0x00, 0x00, 0x00)),
+
+	// MSI-X Table entry 4
+	Write(0xfe040140, DATA(0x10, 0x00, 0x00, 0x00)),
+	Write(0xfe040144, DATA(0x00, 0x00, 0x00, 0x00)),
+	Write(0xfe040148, DATA(0x44, 0xBB, 0xCC, 0xDD)),
+	Write(0xfe04014c, DATA(0x00, 0x00, 0x00, 0x00)),
+
+	// MSI-X Table entry 5
+	Write(0xfe040150, DATA(0x14, 0x00, 0x00, 0x00)),
+	Write(0xfe040154, DATA(0x00, 0x00, 0x00, 0x00)),
+	Write(0xfe040158, DATA(0x55, 0xBB, 0xCC, 0xDD)),
+	Write(0xfe04015c, DATA(0x00, 0x00, 0x00, 0x00)),
+
+	// MSI-X Table entry 6
+	Write(0xfe040160, DATA(0x18, 0x00, 0x00, 0x00)),
+	Write(0xfe040164, DATA(0x00, 0x00, 0x00, 0x00)),
+	Write(0xfe040168, DATA(0x66, 0xBB, 0xCC, 0xDD)),
+	Write(0xfe04016c, DATA(0x00, 0x00, 0x00, 0x00)),
+
+	// MSI-X Table entry 7
+	Write(0xfe040170, DATA(0x1c, 0x00, 0x00, 0x00)),
+	Write(0xfe040174, DATA(0x00, 0x00, 0x00, 0x00)),
+	Write(0xfe040178, DATA(0x77, 0xBB, 0xCC, 0xDD)),
+	Write(0xfe04017c, DATA(0x00, 0x00, 0x00, 0x00)),
 
 }));
 
@@ -172,7 +271,7 @@ PhysFuncConfig getPhysFuncConfig()
 #else
 	uint32_t bar_flags = PCI_BASE_ADDRESS_MEM_TYPE_32;
 #endif
-	uint32_t msixTableSz = 8;
+	uint32_t msixTableSz = NUM_MSIX;
 	uint32_t tableOffset = 0x100 | 4; // Table offset: 0, BIR: 4
 	uint32_t pba = 0x140000 | 4; // BIR: 4
 
@@ -209,6 +308,13 @@ public:
 	RandomTraffic bar0_transfers;
 	RandomTraffic bar2_transfers;
 	RandomTraffic rand_dma_transfers;
+
+	//
+	// Mix MSI-X, BAR0 and host DMA transactions
+	//
+	RandomTraffic bar0_transfers2;
+	RandomTraffic rand_dma_transfers2;
+
 	TLMTrafficGenerator tg;
 	TLMTrafficGenerator tg_dma;
 	iconnect<NR_MASTERS, NR_DEVICES> *bus;
@@ -223,6 +329,8 @@ public:
 	tlm_utils::simple_target_socket<Top> dummy_b3_tgt_socket;
 	tlm_utils::simple_target_socket<Top> dummy_b5_tgt_socket;
 
+	MSIXDev msixdev;
+
 	//
 	// For testing DMA towards host
 	//
@@ -231,6 +339,7 @@ public:
 	sc_clock clk;
 	sc_signal<bool> rst;
 	sc_signal<bool> rst_n;
+	sc_vector<sc_signal<bool> > irq;
 
 	sc_event tgDoneEvent;
 
@@ -252,6 +361,10 @@ public:
 		bar0_transfers(BAR0_ADDR, BAR0_ADDR + RAM_SIZE, (~(0x3llu)), 4, 4, 0, 12000),
 		bar2_transfers(BAR2_ADDR, BAR2_ADDR + RAM_SIZE, (~(0x3llu)), 4, 4, 0, 12000),
 		rand_dma_transfers(0, RAM_SIZE, (~(0x3llu)), 4, 4, 0, 12000),
+
+		bar0_transfers2(BAR0_ADDR - 0x1000, BAR0_ADDR + RAM_SIZE, (~(0x3llu)), 4, 4, 0, 120000),
+		rand_dma_transfers2(0, RAM_SIZE, (~(0x3llu)), 4, 4, 0, 120000),
+
 		tg("tg"),
 		tg_dma("tg-dma"),
 
@@ -266,11 +379,14 @@ public:
 		dummy_b3_tgt_socket("dummy-b3-tgt-socket"),
 		dummy_b5_tgt_socket("dummy-b5-tgt-socket"),
 
+		msixdev("msixdev", NUM_MSIX),
+
 		host_mem("host_mem", sc_time(0, SC_NS), RAM_SIZE),
 
 		clk("clk", sc_time(10, SC_MS)),
 		rst("rst"),
 		rst_n("rst_n"),
+		irq("irq", NUM_MSIX),
 
 		tgDoneEvent("tg-done-event")
 	{
@@ -298,6 +414,9 @@ public:
 
 		bus->memmap(0x0000c000ULL, 0x1000 - 1,
 				ADDRMODE_ABSOLUTE, -1, tlm2tlp.msg_tgt_socket);
+
+		bus->memmap(0xfc000000ULL - 0x1000, 0x1000 - 1,
+				ADDRMODE_ABSOLUTE, -1, msixdev.tgt_socket);
 
 		bus->memmap(0xfc000000ULL, 0xfdffffff04040000 - 1,
 				ADDRMODE_ABSOLUTE, -1, tlm2tlp.mem_tgt_socket);
@@ -331,6 +450,13 @@ public:
 		tg_dma.socket(pcie_ctrlr.dma_tgt_socket);
 		tlm2tlp.dma_init_socket(host_mem.socket);
 
+		//
+		// Connect interrupts
+		//
+		for (int i = 0; i < NUM_MSIX; i++) {
+			pcie_ctrlr.irq[i](irq[i]);
+			msixdev.irq[i](irq[i]);
+		}
 
 		SC_THREAD(tg_done_thread);
 	}
@@ -363,6 +489,16 @@ public:
 				// Config done issue random DMA transfers
 				//
 				tg_dma.addTransfers(rand_dma_transfers, 0, tgDoneCB);
+			} else if (!bar0_transfers2.done()) {
+				//
+				// Generated MSI-X and bar0 transactions
+				//
+				tg.addTransfers(bar0_transfers2, 0,
+						tgDoneCB);
+				//
+				// Generate host DMA transactions
+				//
+				tg_dma.addTransfers(rand_dma_transfers2, 0);
 			} else if (!rand_cfg_transfers.done()) {
 				//
 				// Finish with issuing random cfgspc transfers
@@ -375,6 +511,9 @@ public:
 				assert(bar2_transfers.done());
 				assert(rand_dma_transfers.done());
 				assert(rand_cfg_transfers.done());
+
+				assert(bar0_transfers2.done());
+				assert(rand_dma_transfers2.done());
 
 				cout << endl << " ---  All transfers done!" << endl;
 				sc_stop();
