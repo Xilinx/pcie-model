@@ -1551,10 +1551,19 @@ static void handle_cfg_write_16(pcie_state_t *state, fs_pci_core_resource_t *res
       } else if (pcie_cap && addr == (pcie_cap + PCI_EXP_DEVCAP)) {
         val = dev_ctl_write(state, resource, val);
       } else if (msix_cap && addr == (msix_cap + PCI_MSIX_FLAGS)) {
+        uint16_t table_sz;
+
          //   case PCMCR_MSIX_CTL_REG:
         func_irq_setting(state, resource, FS_IRQMODE_MSIX,
                          !!(val & PCI_MSIX_FLAGS_ENABLE));
         func_mask_msix(state, resource, !!(val & PCI_MSIX_FLAGS_MASKALL));
+
+        /* The table size is read only and can't be altered by SW */
+        table_sz = get_cfg_16(resource, msix_cap + PCI_MSIX_FLAGS) &
+                   PCI_MSIX_FLAGS_QSIZE;
+
+        val &= ~PCI_MSIX_FLAGS_QSIZE;
+        val |= table_sz;
       } else if (in_cap_range(addr,
                               state->cfgspc_state->vpd_cap, PCI_VPD_DATA)) {
         pcie_cfgspc_cb_trigger_vpd(state->cfgspc_state, resource->br->lies->func,
