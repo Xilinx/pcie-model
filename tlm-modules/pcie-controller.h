@@ -82,8 +82,6 @@ public:
 	void b_transport(tlm::tlm_generic_payload& trans, sc_time& delay);
 	void b_transport_dma(tlm::tlm_generic_payload& trans, sc_time& delay);
 
-	void prod_pcie_thread();
-
 	void tx_tlp(uint8_t *data, unsigned int len);
 
 	void handle_MemRd(unsigned int bar_num, uint64_t addr,
@@ -109,6 +107,7 @@ private:
 	uint8_t GetFmt(uint8_t data);
 	uint8_t GetType(uint8_t data);
 	bool IsTLPMemWr(tlm::tlm_generic_payload *gp);
+	bool IsCplD(tlm::tlm_generic_payload *gp);
 
 	void PCIeHostWrite(tlm::tlm_generic_payload& trans, sc_time& delay);
 	void PCIeHostRead(tlm::tlm_generic_payload& trans, sc_time& delay);
@@ -116,9 +115,8 @@ private:
 
 	std::list<tlm::tlm_generic_payload*> m_txList;
 	sc_event m_tx_event;
-	sc_event m_rx_event;
 
-	tlm::tlm_generic_payload *m_dma_ongoing;
+	bool m_dma_ongoing;
 	sc_event m_dma_done_event;
 
 	pcie_state_t *m_pcie_state;

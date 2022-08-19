@@ -44,9 +44,8 @@ PCIeController::PCIeController(sc_core::sc_module_name name,
 	irq("irq", cfg.GetNumIrqs()),
 
 	m_tx_event("tx-event"),
-	m_rx_event("rx-event"),
 
-	m_dma_ongoing(nullptr),
+	m_dma_ongoing(false),
 	m_dma_done_event("dma-done-event")
 {
 	m_cfg = cfg; // store the cfg
@@ -58,7 +57,6 @@ PCIeController::PCIeController(sc_core::sc_module_name name,
 	dma_tgt_socket.register_b_transport(this,
 				&PCIeController::b_transport_dma);
 
-	SC_THREAD(prod_pcie_thread);
 	SC_THREAD(TLP_tx_thread);
 
 	for (unsigned int i = 0; i < irq.size(); i++) {
@@ -78,8 +76,24 @@ void PCIeController::irq_thread(unsigned int i)
 	}
 
 	while (true) {
+		tlm::tlm_generic_payload trans;
 		wait(irq[i].posedge_event());
+
+		//
+		// One outstanding DMA transaction is supported at the moment
+		//
+		while (m_dma_ongoing) {
+			wait(m_dma_done_event);
+		}
+		m_dma_ongoing = true;
+
 		pcie_hw_msix_irq(m_pcie_state, func, i);
+
+		//
+		// Wait for the transaction to finish
+		//
+		wait(m_dma_done_event);
+		wait(SC_ZERO_TIME);
 	}
 }
 
@@ -166,10 +180,9 @@ void PCIeController::b_transport(tlm::tlm_generic_payload& trans, sc_time& delay
 	ByteSwap(trans.get_data_ptr(), hdrlen);
 #endif
 	pcie_rx_tlp(m_pcie_state, trans.get_data_ptr(), trans.get_data_length());
+	prod_pcie(m_pcie_state);
 
 	trans.set_response_status(tlm::TLM_OK_RESPONSE);
-
-	m_rx_event.notify();
 }
 
 void PCIeController::b_transport_dma(tlm::tlm_generic_payload& trans, sc_time& delay)
@@ -180,7 +193,13 @@ void PCIeController::b_transport_dma(tlm::tlm_generic_payload& trans, sc_time& d
 	while (m_dma_ongoing) {
 		wait(m_dma_done_event);
 	}
-	m_dma_ongoing = &trans;
+	m_dma_ongoing = true;
+
+	//
+	// Wait for the delay before generating the TLP
+	//
+	wait(delay);
+	delay = SC_ZERO_TIME;
 
 	if (trans.is_read()){
 		PCIeHostRead(trans, delay);
@@ -192,7 +211,7 @@ void PCIeController::b_transport_dma(tlm::tlm_generic_payload& trans, sc_time& d
 	// Wait for the transaction to finish
 	//
 	wait(m_dma_done_event);
-	m_dma_ongoing = nullptr;
+	wait(SC_ZERO_TIME);
 
 	trans.set_response_status(tlm::TLM_OK_RESPONSE);
 }
@@ -215,6 +234,7 @@ void PCIeController::PCIeHostReadDone()
 	// DMA read data has been received, the DMA transaction has been
 	// completed.
 	//
+	m_dma_ongoing = false;
 	m_dma_done_event.notify();
 }
 
@@ -230,14 +250,6 @@ void PCIeController::PCIeHostWrite(tlm::tlm_generic_payload& trans, sc_time& del
 			trans.get_address(),
 			trans.get_data_ptr(),
 			trans.get_data_length());
-}
-
-void PCIeController::prod_pcie_thread()
-{
-	while (true) {
-		wait(m_rx_event);
-		prod_pcie(m_pcie_state);
-	}
 }
 
 void PCIeController::ByteSwap(uint8_t *data, unsigned int len)
@@ -337,7 +349,8 @@ void PCIeController::TLP_tx_thread()
 		// If it is a DMA write towards host the transaction is done
 		// here
 		//
-		if (IsTLPMemWr(tlp)) {
+		if (IsTLPMemWr(tlp) || IsCplD(tlp)) {
+			m_dma_ongoing = false;
 			m_dma_done_event.notify();
 		}
 
@@ -358,6 +371,14 @@ void PCIeController::handle_MemRd(unsigned int bar_num, uint64_t addr,
 	trans.set_data_ptr(data);
 	trans.set_data_length(len);
 	trans.set_streaming_width(len);
+
+	//
+	// One outstanding DMA transaction is supported at the moment
+	//
+	while (m_dma_ongoing) {
+		wait(m_dma_done_event);
+	}
+	m_dma_ongoing = true;
 
 	switch (bar_num) {
 	case 0:
@@ -384,6 +405,26 @@ void PCIeController::handle_MemRd(unsigned int bar_num, uint64_t addr,
 
 	wait(delay);
 	delay = SC_ZERO_TIME;
+}
+
+bool PCIeController::IsCplD(tlm::tlm_generic_payload *gp)
+{
+	uint8_t *d = gp->get_data_ptr();
+	unsigned int len = gp->get_data_length();
+	uint8_t fmt;
+	uint8_t type;
+
+	assert(len);
+
+	fmt = GetFmt(d[0]);
+	type = GetType(d[0]);
+
+	if (type == TLP0_TYPE_CPL && fmt == TLP0_FMT_3DW_DATA) {
+		// CplD
+		return true;
+	}
+
+	return false;
 }
 
 void PCIeController::handle_MemWr(unsigned int bar_num, uint64_t addr,
