@@ -112,9 +112,46 @@ private:
 	void PCIeHostWrite(tlm::tlm_generic_payload& trans, sc_time& delay);
 	void PCIeHostRead(tlm::tlm_generic_payload& trans, sc_time& delay);
 	void TLP_tx_thread();
+	void memwr_thread();
 
 	std::list<tlm::tlm_generic_payload*> m_txList;
 	sc_event m_tx_event;
+
+	//
+	// User logic writes
+	//
+	class WrTxn {
+	public:
+		WrTxn(unsigned int bar_num, uint64_t addr,
+			uint8_t *data, unsigned int len) :
+			m_bar_num(bar_num)
+		{
+			m_data = new uint8_t[len];
+
+			memcpy(reinterpret_cast<void*>(m_data),
+				reinterpret_cast<void*>(data), len);
+
+			m_gp.set_command(tlm::TLM_WRITE_COMMAND);
+			m_gp.set_address(addr);
+			m_gp.set_data_ptr(m_data);
+			m_gp.set_data_length(len);
+			m_gp.set_streaming_width(len);
+		}
+
+		~WrTxn()
+		{
+			delete m_data;
+		}
+
+		tlm::tlm_generic_payload& GetGP() { return m_gp; }
+		unsigned int GetBarNum() { return m_bar_num; }
+	private:
+		uint8_t *m_data;
+		tlm::tlm_generic_payload m_gp;
+		unsigned int m_bar_num;
+	};
+	std::list<WrTxn*> m_wrList;
+	sc_event m_wr_event;
 
 	bool m_dma_ongoing;
 	sc_event m_dma_done_event;

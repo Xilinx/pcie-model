@@ -44,6 +44,7 @@ PCIeController::PCIeController(sc_core::sc_module_name name,
 	irq("irq", cfg.GetNumIrqs()),
 
 	m_tx_event("tx-event"),
+	m_wr_event("wr-event"),
 
 	m_dma_ongoing(false),
 	m_dma_done_event("dma-done-event")
@@ -58,6 +59,7 @@ PCIeController::PCIeController(sc_core::sc_module_name name,
 				&PCIeController::b_transport_dma);
 
 	SC_THREAD(TLP_tx_thread);
+	SC_THREAD(memwr_thread);
 
 	for (unsigned int i = 0; i < irq.size(); i++) {
 		sc_spawn(sc_bind(&PCIeController::irq_thread,
@@ -430,40 +432,53 @@ bool PCIeController::IsCplD(tlm::tlm_generic_payload *gp)
 void PCIeController::handle_MemWr(unsigned int bar_num, uint64_t addr,
 				  uint8_t *data, unsigned int len)
 {
-	tlm::tlm_generic_payload trans;
-	sc_time delay(SC_ZERO_TIME);
+	WrTxn *txn = new WrTxn(bar_num, addr, data, len);
+	m_wrList.push_back(txn);
+	m_wr_event.notify();
+}
 
-	trans.set_command(tlm::TLM_WRITE_COMMAND);
-	trans.set_address(addr);
-	trans.set_data_ptr(data);
-	trans.set_data_length(len);
-	trans.set_streaming_width(len);
+void PCIeController::memwr_thread()
+{
+	while (true) {
+		WrTxn *txn;
+		sc_time delay(SC_ZERO_TIME);
 
-	switch (bar_num) {
-	case 0:
-		bar0_init_socket->b_transport(trans, delay);
-		break;
-	case 1:
-		bar1_init_socket->b_transport(trans, delay);
-		break;
-	case 2:
-		bar2_init_socket->b_transport(trans, delay);
-		break;
-	case 3:
-		bar3_init_socket->b_transport(trans, delay);
-		break;
-	case 4:
-		bar4_init_socket->b_transport(trans, delay);
-		break;
-	case 5:
-		bar5_init_socket->b_transport(trans, delay);
-		break;
-	default:
-		break;
-	};
+		if (m_wrList.empty()) {
+			wait(m_wr_event);
+		}
+		txn = m_wrList.front();
 
-	wait(delay);
-	delay = SC_ZERO_TIME;
+		switch (txn->GetBarNum()) {
+		case 0:
+			bar0_init_socket->b_transport(txn->GetGP(), delay);
+			break;
+		case 1:
+			bar1_init_socket->b_transport(txn->GetGP(), delay);
+			break;
+		case 2:
+			bar2_init_socket->b_transport(txn->GetGP(), delay);
+			break;
+		case 3:
+			bar3_init_socket->b_transport(txn->GetGP(), delay);
+			break;
+		case 4:
+			bar4_init_socket->b_transport(txn->GetGP(), delay);
+			break;
+		case 5:
+			bar5_init_socket->b_transport(txn->GetGP(), delay);
+			break;
+		default:
+			break;
+		};
+
+		//
+		// Wait for the annotated delay
+		//
+		wait(delay);
+
+		m_wrList.remove(txn);
+		delete txn;
+	}
 }
 
 pcie_core_settings_t *PCIeController::GetPCIeCoreSettings()
