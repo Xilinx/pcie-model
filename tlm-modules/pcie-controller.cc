@@ -25,6 +25,7 @@
  */
 #include <byteswap.h>
 #include "pcie-controller.h"
+#include <sstream>
 
 PCIeController::PCIeController(sc_core::sc_module_name name,
 				PhysFuncConfig cfg) :
@@ -529,4 +530,60 @@ pci_bar_type_t PCIeController::GetBarType(int fn, pci_bar_num_t bar_num)
 		}
 	}
 	return PCI_BAR_TYPE_INVAL;
+}
+
+void PCIeController::b_transport_tieoff(tlm::tlm_generic_payload& trans,
+					sc_time& delay)
+{
+	std::ostringstream msg;
+
+	msg << name() << ": Tied off socket accessed"  << endl;
+	SC_REPORT_WARNING("PCIeController", msg.str().c_str());
+	trans.set_response_status(tlm::TLM_GENERIC_ERROR_RESPONSE);
+}
+
+void
+PCIeController::tieoff(tlm_utils::simple_initiator_socket<PCIeController> &i_sock,
+			const char *name)
+{
+	tlm_utils::simple_target_socket<PCIeController> *tieoff_sk =
+		new tlm_utils::simple_target_socket<PCIeController>(name);
+
+	tieoff_sk->register_b_transport(this,
+					&PCIeController::b_transport_tieoff);
+	i_sock.bind(*tieoff_sk);
+}
+
+void
+PCIeController::tieoff(tlm_utils::simple_target_socket<PCIeController> &t_sock,
+			const char *name)
+{
+	tlm_utils::simple_initiator_socket<PCIeController> *tieoff_sk =
+		new tlm_utils::simple_initiator_socket<PCIeController>(name);
+	tieoff_sk->bind(t_sock);
+}
+
+void PCIeController::before_end_of_elaboration()
+{
+	if (!bar0_init_socket.size()) {
+		tieoff(bar0_init_socket, "bar0-tieoff");
+	}
+	if (!bar1_init_socket.size()) {
+		tieoff(bar1_init_socket, "bar1-tieoff");
+	}
+	if (!bar2_init_socket.size()) {
+		tieoff(bar2_init_socket, "bar2-tieoff");
+	}
+	if (!bar3_init_socket.size()) {
+		tieoff(bar3_init_socket, "bar3-tieoff");
+	}
+	if (!bar4_init_socket.size()) {
+		tieoff(bar4_init_socket, "bar4-tieoff");
+	}
+	if (!bar5_init_socket.size()) {
+		tieoff(bar5_init_socket, "bar5-tieoff");
+	}
+	if (!dma_tgt_socket.size()) {
+		tieoff(dma_tgt_socket, "dma_tgt_socket-tieoff");
+	}
 }

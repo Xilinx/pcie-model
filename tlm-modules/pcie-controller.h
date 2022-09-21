@@ -114,6 +114,14 @@ private:
 	void TLP_tx_thread();
 	void memwr_thread();
 
+	void tieoff(tlm_utils::simple_initiator_socket<PCIeController> &i_sock,
+			const char *name);
+	void tieoff(tlm_utils::simple_target_socket<PCIeController> &t_sock,
+			const char *name);
+	void b_transport_tieoff(tlm::tlm_generic_payload& trans,
+				sc_time& delay);
+	void before_end_of_elaboration();
+
 	std::list<tlm::tlm_generic_payload*> m_txList;
 	sc_event m_tx_event;
 
