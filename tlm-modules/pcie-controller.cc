@@ -44,6 +44,9 @@ PCIeController::PCIeController(sc_core::sc_module_name name,
 
 	irq("irq", cfg.GetNumIrqs()),
 
+	ats_req("ats_req"),
+	ats_inv("ats_inv"),
+
 	m_tx_event("tx-event"),
 	m_wr_event("wr-event"),
 
@@ -58,6 +61,8 @@ PCIeController::PCIeController(sc_core::sc_module_name name,
 				&PCIeController::b_transport);
 	dma_tgt_socket.register_b_transport(this,
 				&PCIeController::b_transport_dma);
+	ats_req.register_b_transport(this,
+				&PCIeController::b_transport_ats_req);
 
 	SC_THREAD(TLP_tx_thread);
 	SC_THREAD(memwr_thread);
@@ -542,6 +547,14 @@ void PCIeController::b_transport_tieoff(tlm::tlm_generic_payload& trans,
 	trans.set_response_status(tlm::TLM_GENERIC_ERROR_RESPONSE);
 }
 
+void PCIeController::b_transport_ats_req(tlm::tlm_generic_payload& trans,
+						sc_time& delay)
+{
+	SC_REPORT_WARNING("PCIeController",
+				"ATS requests are not yet supported\n");
+	trans.set_response_status(tlm::TLM_GENERIC_ERROR_RESPONSE);
+}
+
 void
 PCIeController::tieoff(tlm_utils::simple_initiator_socket<PCIeController> &i_sock,
 			const char *name)
@@ -585,5 +598,11 @@ void PCIeController::before_end_of_elaboration()
 	}
 	if (!dma_tgt_socket.size()) {
 		tieoff(dma_tgt_socket, "dma_tgt_socket-tieoff");
+	}
+	if (!ats_req.size()) {
+		tieoff(ats_req, "ats_req-tieoff");
+	}
+	if (!ats_inv.size()) {
+		tieoff(ats_inv, "ats_inv->tieoff");
 	}
 }

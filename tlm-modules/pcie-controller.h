@@ -73,6 +73,12 @@ public:
 	//
 	sc_vector<sc_in<bool> > irq;
 
+	//
+	// Currently unsupported
+	//
+	tlm_utils::simple_target_socket<PCIeController> ats_req;
+	tlm_utils::simple_initiator_socket<PCIeController> ats_inv;
+
 	SC_HAS_PROCESS(PCIeController);
 
 	PCIeController(sc_core::sc_module_name name, PhysFuncConfig cfg);
@@ -113,6 +119,9 @@ private:
 	void PCIeHostRead(tlm::tlm_generic_payload& trans, sc_time& delay);
 	void TLP_tx_thread();
 	void memwr_thread();
+
+	void b_transport_ats_req(tlm::tlm_generic_payload& trans,
+					sc_time& delay);
 
 	void tieoff(tlm_utils::simple_initiator_socket<PCIeController> &i_sock,
 			const char *name);
