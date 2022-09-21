@@ -46,6 +46,7 @@ PCIeController::PCIeController(sc_core::sc_module_name name,
 
 	ats_req("ats_req"),
 	ats_inv("ats_inv"),
+	cfgspc_snoop("cfgspc_snoop"),
 
 	m_tx_event("tx-event"),
 	m_wr_event("wr-event"),
@@ -604,5 +605,8 @@ void PCIeController::before_end_of_elaboration()
 	}
 	if (!ats_inv.size()) {
 		tieoff(ats_inv, "ats_inv->tieoff");
+	}
+	if (!cfgspc_snoop.size()) {
+		tieoff(cfgspc_snoop, "cfgspc_snoop->tieoff");
 	}
 }

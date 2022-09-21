@@ -78,6 +78,7 @@ public:
 	//
 	tlm_utils::simple_target_socket<PCIeController> ats_req;
 	tlm_utils::simple_initiator_socket<PCIeController> ats_inv;
+	tlm_utils::simple_initiator_socket<PCIeController> cfgspc_snoop;
 
 	SC_HAS_PROCESS(PCIeController);
 
