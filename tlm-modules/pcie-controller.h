@@ -108,6 +108,48 @@ public:
 	void PCIeHostReadDone();
 
 	void irq_thread(unsigned int i);
+
+	template<typename T>
+	void bind(T &dev)
+	{
+		unsigned int i;
+
+		cfgspc_snoop.bind(dev.config);
+		dev.dma.bind(dma_tgt_socket);
+
+		for (i = 0; i < dev.bar.size(); i++) {
+			switch (i) {
+			case 0:
+				bar0_init_socket.bind(dev.bar[i]);
+				break;
+			case 1:
+				bar1_init_socket.bind(dev.bar[i]);
+				break;
+			case 2:
+				bar2_init_socket.bind(dev.bar[i]);
+				break;
+			case 3:
+				bar3_init_socket.bind(dev.bar[i]);
+				break;
+			case 4:
+				bar4_init_socket.bind(dev.bar[i]);
+				break;
+			case 5:
+				bar5_init_socket.bind(dev.bar[i]);
+				break;
+			default:
+				break;
+			}
+		}
+
+		for (i = 0; i < dev.irq.size() && i < irq.size(); i++) {
+			dev.irq[i](signals_irq[i]);
+		}
+
+		dev.ats_req.bind(ats_req);
+		ats_inv.bind(dev.ats_inv);
+	}
+
 private:
 	unsigned int GetHdrLen(uint8_t data);
 	void ByteSwap(uint8_t *data, unsigned int len);
