@@ -42,11 +42,13 @@ PCIeController::PCIeController(sc_core::sc_module_name name,
 
 	dma_tgt_socket("dma_tgt_socket"),
 
-	irq("irq", cfg.GetNumIrqs()),
+	signals_irq("signals_irq", cfg.GetNumIrqs()),
 
 	ats_req("ats_req"),
 	ats_inv("ats_inv"),
 	cfgspc_snoop("cfgspc_snoop"),
+
+	irq("irq", cfg.GetNumIrqs()),
 
 	m_tx_event("tx-event"),
 	m_wr_event("wr-event"),
@@ -67,6 +69,10 @@ PCIeController::PCIeController(sc_core::sc_module_name name,
 
 	SC_THREAD(TLP_tx_thread);
 	SC_THREAD(memwr_thread);
+
+	for (unsigned int i = 0; i < cfg.GetNumIrqs(); i++) {
+		irq[i](signals_irq[i]);
+	}
 
 	for (unsigned int i = 0; i < irq.size(); i++) {
 		sc_spawn(sc_bind(&PCIeController::irq_thread,

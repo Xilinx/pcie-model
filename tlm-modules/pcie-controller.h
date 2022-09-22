@@ -69,9 +69,9 @@ public:
 	tlm_utils::simple_target_socket<PCIeController> dma_tgt_socket;
 
 	//
-	// User application interrupt (MSI-X) vector
+	// User application interrupt (MSI-X) vector interface
 	//
-	sc_vector<sc_in<bool> > irq;
+	sc_vector<sc_signal<bool> > signals_irq;
 
 	//
 	// Currently unsupported
@@ -131,6 +131,8 @@ private:
 	void b_transport_tieoff(tlm::tlm_generic_payload& trans,
 				sc_time& delay);
 	void before_end_of_elaboration();
+
+	sc_vector<sc_in<bool> > irq;
 
 	std::list<tlm::tlm_generic_payload*> m_txList;
 	sc_event m_tx_event;
