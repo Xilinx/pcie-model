@@ -339,7 +339,6 @@ public:
 	sc_clock clk;
 	sc_signal<bool> rst;
 	sc_signal<bool> rst_n;
-	sc_vector<sc_signal<bool> > irq;
 
 	sc_event tgDoneEvent;
 
@@ -386,7 +385,6 @@ public:
 		clk("clk", sc_time(10, SC_MS)),
 		rst("rst"),
 		rst_n("rst_n"),
-		irq("irq", NUM_MSIX),
 
 		tgDoneEvent("tg-done-event")
 	{
@@ -454,8 +452,7 @@ public:
 		// Connect interrupts
 		//
 		for (int i = 0; i < NUM_MSIX; i++) {
-			pcie_ctrlr.irq[i](irq[i]);
-			msixdev.irq[i](irq[i]);
+			msixdev.irq[i](pcie_ctrlr.signals_irq[i]);
 		}
 
 		SC_THREAD(tg_done_thread);

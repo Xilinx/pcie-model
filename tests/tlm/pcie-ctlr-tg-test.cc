@@ -370,7 +370,6 @@ public:
 	sc_clock clk;
 	sc_signal<bool> rst;
 	sc_signal<bool> rst_n;
-	sc_vector<sc_signal<bool> > irq;
 
 	SC_HAS_PROCESS(Top);
 
@@ -406,8 +405,7 @@ public:
 
 		clk("clk", sc_time(10, SC_MS)),
 		rst("rst"),
-		rst_n("rst_n"),
-		irq("irq", NUM_MSIX)
+		rst_n("rst_n")
 	{
 		SC_THREAD(pull_reset);
 		SC_METHOD(gen_rst_n);
@@ -476,8 +474,7 @@ public:
 		// Connect interrupts
 		//
 		for (int i = 0; i < NUM_MSIX; i++) {
-			pcie_ctrlr.irq[i](irq[i]);
-			msixdev.irq[i](irq[i]);
+			msixdev.irq[i](pcie_ctrlr.signals_irq[i]);
 		}
 	}
 };
