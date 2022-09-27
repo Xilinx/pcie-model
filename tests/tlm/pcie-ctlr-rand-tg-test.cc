@@ -29,6 +29,9 @@
 #include <stdio.h>
 #include <signal.h>
 #include <unistd.h>
+#include <vector>
+#include <tuple>
+#include <string>
 
 #include "systemc.h"
 #include "tlm_utils/simple_initiator_socket.h"
@@ -75,6 +78,8 @@ using namespace utils;
 #endif
 
 #define NUM_MSIX 8
+
+using TGTest = std::tuple<TLMTrafficGenerator&, ITrafficDesc&, std::string>;
 
 sc_event *tgDoneEvent;
 void tgDoneCB(TLMTrafficGenerator *gen, int threadId)
@@ -260,6 +265,13 @@ TrafficDesc config_xfers(merge({
 
 }));
 
+// Max payload configuration
+TrafficDesc cfg_max_128(merge({ Write(0xc4, DATA(0x00, 0x50), 2), }));
+TrafficDesc cfg_max_256(merge({ Write(0xc4, DATA(0x20, 0x50), 2), }));
+TrafficDesc cfg_max_512(merge({ Write(0xc4, DATA(0x40, 0x50), 2), }));
+TrafficDesc cfg_max_1024(merge({ Write(0xc4, DATA(0x60, 0x50), 2), }));
+TrafficDesc cfg_max_2048(merge({ Write(0xc4, DATA(0x80, 0x50), 2), }));
+
 PhysFuncConfig getPhysFuncConfig()
 {
 	PhysFuncConfig cfg;
@@ -291,6 +303,10 @@ PhysFuncConfig getPhysFuncConfig()
 	cfg.SetPCIExpansionROMBAR(0, 0);
 
 	cfg.AddPCICapability(pmCap);
+
+        pcieCap.SetLinkStatus(PCI_EXP_LNKSTA_CLS_2_5GB | PCI_EXP_LNKSTA_NLW_X1);
+        pcieCap.SetDeviceControl(PCI_EXP_DEVCTL_PAYLOAD_4096B | PCI_EXP_DEVCTL_READRQ_4096B);
+
 	cfg.AddPCICapability(pcieCap);
 
 	msixCap.SetMessageControl(msixTableSz-1);
@@ -310,10 +326,20 @@ public:
 	RandomTraffic rand_dma_transfers;
 
 	//
+	// Test max payload sizes
+	//
+	RandomTraffic rand_dma_128;
+	RandomTraffic rand_dma_256;
+	RandomTraffic rand_dma_512;
+	RandomTraffic rand_dma_1024;
+	RandomTraffic rand_dma_2048;
+
+	//
 	// Mix MSI-X, BAR0 and host DMA transactions
 	//
 	RandomTraffic bar0_transfers2;
 	RandomTraffic rand_dma_transfers2;
+
 
 	TLMTrafficGenerator tg;
 	TLMTrafficGenerator tg_dma;
@@ -359,10 +385,16 @@ public:
 		rand_cfg_transfers(0, PCIE_CFGSPC_SIZE, (~(0x3llu)), 4, 4, 0, 12000),
 		bar0_transfers(BAR0_ADDR, BAR0_ADDR + RAM_SIZE, (~(0x3llu)), 4, 4, 0, 12000),
 		bar2_transfers(BAR2_ADDR, BAR2_ADDR + RAM_SIZE, (~(0x3llu)), 4, 4, 0, 12000),
-		rand_dma_transfers(0, RAM_SIZE, (~(0x3llu)), 4, 4, 0, 12000),
+		rand_dma_transfers(0, RAM_SIZE, (~(0x3llu)), 8*1024, 8*1024, 0, 12000),
 
-		bar0_transfers2(BAR0_ADDR - 0x1000, BAR0_ADDR + RAM_SIZE, (~(0x3llu)), 4, 4, 0, 120000),
-		rand_dma_transfers2(0, RAM_SIZE, (~(0x3llu)), 4, 4, 0, 120000),
+		rand_dma_128(0, RAM_SIZE, (~(0x3llu)), 4*1024, 4*1024, 0, 12000),
+		rand_dma_256(0, RAM_SIZE, (~(0x3llu)), 4*1024, 4*1024, 0, 12000),
+		rand_dma_512(0, RAM_SIZE, (~(0x3llu)), 4*1024, 4*1024, 0, 12000),
+		rand_dma_1024(0, RAM_SIZE, (~(0x3llu)), 4*1024, 4*1024, 0, 12000),
+		rand_dma_2048(0, RAM_SIZE, (~(0x3llu)), 4*1024, 4*1024, 0, 12000),
+
+		bar0_transfers2(BAR0_ADDR - 0x1000, BAR0_ADDR + RAM_SIZE, (~(0x3llu)), 4, 4, 0, 0),
+		rand_dma_transfers2(0, RAM_SIZE, (~(0x3llu)), 4*1024, 4*1024, 0, 0),
 
 		tg("tg"),
 		tg_dma("tg-dma"),
@@ -392,12 +424,6 @@ public:
 		SC_METHOD(gen_rst_n);
 
 		sensitive << rst;
-
-		//
-		// Setup traffic generator
-		//
-		tg.addTransfers(config_xfers, 0, tgDoneCB);
-		tg.enableDebug();
 
 		//
 		// Setup bus
@@ -444,7 +470,6 @@ public:
 		//
 		// Setup DMA to host memory traffic generator
 		//
-		tg_dma.enableDebug();
 		tg_dma.socket(pcie_ctrlr.dma_tgt_socket);
 		tlm2tlp.dma_init_socket(host_mem.socket);
 
@@ -455,7 +480,64 @@ public:
 			msixdev.irq[i](pcie_ctrlr.signals_irq[i]);
 		}
 
+		SetupTests();
+
 		SC_THREAD(tg_done_thread);
+	}
+
+	void SetupTests()
+	{
+		m_tests.emplace_back(tg, config_xfers, "Default config");
+		m_tests.emplace_back(tg, bar0_transfers, "Test bar0");
+		m_tests.emplace_back(tg, bar2_transfers, "Test bar2");
+
+		m_tests.emplace_back(tg_dma, rand_dma_transfers,
+					"Test random DMA (towards host)");
+
+		//
+		// Max payload size tests
+		//
+		m_tests.emplace_back(tg, cfg_max_128,
+					"Configure max payload 128");
+		m_tests.emplace_back(tg_dma, rand_dma_128,
+					"Test random dma");
+
+		m_tests.emplace_back(tg, cfg_max_256,
+					"Configure max payload 256");
+		m_tests.emplace_back(tg_dma, rand_dma_256,
+					"Test random dma 256");
+
+		m_tests.emplace_back(tg, cfg_max_512,
+					"Configure max payload 512");
+		m_tests.emplace_back(tg_dma, rand_dma_512,
+					"Test random dma 512");
+
+		m_tests.emplace_back(tg, cfg_max_1024,
+					"Configure max payload 1024");
+		m_tests.emplace_back(tg_dma, rand_dma_1024,
+					"Test random dma 1024");
+
+		m_tests.emplace_back(tg, cfg_max_2048,
+					"Configure max payload 2048");
+		m_tests.emplace_back(tg_dma, rand_dma_2048,
+					"Test random dma 2048");
+
+		m_it = m_tests.begin();
+
+		launch_next_test();
+	}
+
+	void launch_next_test()
+	{
+		TGTest& test = (*m_it);
+		TLMTrafficGenerator& tg = std::get<0>(test);
+		ITrafficDesc& desc = std::get<1>(test);
+		std::string& str = std::get<2>(test);
+
+		cout << " * " << str << endl;
+
+		tg.addTransfers(desc, 0, tgDoneCB);
+		m_it++;
 	}
 
 	//
@@ -469,54 +551,39 @@ public:
 			//
 			wait(tgDoneEvent);
 
-			if (!bar0_transfers.done()) {
-				//
-				// Generate bar0 transfers
-				//
-				tg.addTransfers(bar0_transfers, 0,
-						tgDoneCB);
-			} else if (!bar2_transfers.done()) {
-				//
-				// Generate bar2 transfers
-				//
-				tg.addTransfers(bar2_transfers, 0,
-						tgDoneCB);
-			} else if (!rand_dma_transfers.done()) {
-				//
-				// Config done issue random DMA transfers
-				//
-				tg_dma.addTransfers(rand_dma_transfers, 0, tgDoneCB);
+			if (m_it != m_tests.end()) {
+
+				launch_next_test();
+
 			} else if (!bar0_transfers2.done()) {
-				//
-				// Generated MSI-X and bar0 transactions
-				//
-				tg.addTransfers(bar0_transfers2, 0,
+				cout << " * Test simultaneous DMA / MSI-X" << endl;
+				tg.addTransfers(bar0_transfers2, 0);
+
+				tg_dma.addTransfers(rand_dma_transfers2, 0,
 						tgDoneCB);
-				//
-				// Generate host DMA transactions
-				//
-				tg_dma.addTransfers(rand_dma_transfers2, 0);
 			} else if (!rand_cfg_transfers.done()) {
-				//
-				// Finish with issuing random cfgspc transfers
-				//
+				cout << " * Test rand cfg space txns" << endl;
 				tg.addTransfers(rand_cfg_transfers, 0,
 						tgDoneCB);
 			} else {
-				assert(config_xfers.done());
-				assert(bar0_transfers.done());
-				assert(bar2_transfers.done());
-				assert(rand_dma_transfers.done());
-				assert(rand_cfg_transfers.done());
-
+				for (m_it = m_tests.begin();
+					m_it != m_tests.end(); m_it++) {
+					ITrafficDesc& t_desc = std::get<1>((*m_it));
+					assert(t_desc.done());
+				}
 				assert(bar0_transfers2.done());
 				assert(rand_dma_transfers2.done());
+				assert(rand_cfg_transfers.done());
 
 				cout << endl << " ---  All transfers done!" << endl;
 				sc_stop();
 			}
 		}
 	}
+
+private:
+	std::vector<TGTest> m_tests;
+	std::vector<TGTest>::iterator m_it;
 };
 
 void usage(void)
@@ -529,8 +596,6 @@ int sc_main(int argc, char* argv[])
 	Top *top = new Top("top");
 
 	tgDoneEvent = &top->tgDoneEvent;
-
-	cout << "Run: " << top->name() << endl;
 
 	sc_start();
 
