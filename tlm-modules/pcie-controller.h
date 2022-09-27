@@ -35,6 +35,7 @@
 #include "libpcie-callbacks.h"
 #include "pf-config.h"
 #include "pcie/tlp_header_defs.h"
+#include "tlm-aligner.h"
 
 class PCIeController : public sc_core::sc_module
 {
@@ -45,6 +46,9 @@ public:
 		//
 		TLPHdr_3DW_Sz = 12,
 		TLPHdr_4DW_Sz = 16,
+
+		SZ_1KB = 1024,
+		SZ_4KB = 4 * SZ_1KB,
 	};
 
 	//
@@ -82,7 +86,9 @@ public:
 
 	SC_HAS_PROCESS(PCIeController);
 
-	PCIeController(sc_core::sc_module_name name, PhysFuncConfig cfg);
+	PCIeController(sc_core::sc_module_name name,
+			PhysFuncConfig cfg, bool aligner_enable = true);
+	~PCIeController();
 
 	void init();
 
@@ -163,6 +169,8 @@ private:
 	void TLP_tx_thread();
 	void memwr_thread();
 
+	void b_transport_proxy(tlm::tlm_generic_payload& trans, sc_time& delay);
+
 	void b_transport_ats_req(tlm::tlm_generic_payload& trans,
 					sc_time& delay);
 
@@ -175,6 +183,10 @@ private:
 	void before_end_of_elaboration();
 
 	sc_vector<sc_in<bool> > irq;
+
+	tlm_aligner *m_aligner;
+	tlm_utils::simple_initiator_socket<PCIeController> *proxy_init_socket;
+	tlm_utils::simple_target_socket<PCIeController> *proxy_target_socket;
 
 	std::list<tlm::tlm_generic_payload*> m_txList;
 	sc_event m_tx_event;

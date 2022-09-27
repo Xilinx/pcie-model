@@ -28,7 +28,8 @@
 #include <sstream>
 
 PCIeController::PCIeController(sc_core::sc_module_name name,
-				PhysFuncConfig cfg) :
+				PhysFuncConfig cfg,
+				bool aligner_enable) :
 	sc_module(name),
 	init_socket("init_socket"),
 	tgt_socket("tgt-socket"),
@@ -50,6 +51,10 @@ PCIeController::PCIeController(sc_core::sc_module_name name,
 
 	irq("irq", cfg.GetNumIrqs()),
 
+	m_aligner(NULL),
+	proxy_init_socket(NULL),
+	proxy_target_socket(NULL),
+
 	m_tx_event("tx-event"),
 	m_wr_event("wr-event"),
 
@@ -62,10 +67,32 @@ PCIeController::PCIeController(sc_core::sc_module_name name,
 
 	tgt_socket.register_b_transport(this,
 				&PCIeController::b_transport);
-	dma_tgt_socket.register_b_transport(this,
-				&PCIeController::b_transport_dma);
 	ats_req.register_b_transport(this,
 				&PCIeController::b_transport_ats_req);
+
+	if (aligner_enable) {
+		m_aligner = new tlm_aligner("aligner", SZ_4KB,
+						SZ_4KB, SZ_4KB, true),
+		proxy_init_socket = new
+			tlm_utils::simple_initiator_socket<PCIeController>
+				("proxy_init_socket");
+
+		proxy_target_socket = new
+			tlm_utils::simple_target_socket<PCIeController>
+				("proxy_target_socket");
+
+		dma_tgt_socket.register_b_transport(this,
+			&PCIeController::b_transport_proxy);
+
+		proxy_target_socket->register_b_transport(this,
+			&PCIeController::b_transport_dma);
+
+		proxy_init_socket->bind(m_aligner->target_socket);
+		m_aligner->init_socket.bind((*proxy_target_socket));
+	} else {
+		dma_tgt_socket.register_b_transport(this,
+					&PCIeController::b_transport_dma);
+	}
 
 	SC_THREAD(TLP_tx_thread);
 	SC_THREAD(memwr_thread);
@@ -79,6 +106,12 @@ PCIeController::PCIeController(sc_core::sc_module_name name,
 				this,
 				i));
 	}
+}
+
+PCIeController::~PCIeController() {
+	delete proxy_init_socket;
+	delete proxy_target_socket;
+	delete m_aligner;
 }
 
 void PCIeController::irq_thread(unsigned int i)
@@ -198,6 +231,18 @@ void PCIeController::b_transport(tlm::tlm_generic_payload& trans, sc_time& delay
 	prod_pcie(m_pcie_state);
 
 	trans.set_response_status(tlm::TLM_OK_RESPONSE);
+}
+
+void PCIeController::b_transport_proxy(tlm::tlm_generic_payload& trans, sc_time& delay)
+{
+	uint32_t max_sz = pcie_max_payload(m_pcie_state);
+	uint32_t max_rd_sz = pcie_max_read_req_size(m_pcie_state);
+
+	if (trans.is_read() && max_rd_sz < max_sz) {
+		max_sz = max_rd_sz;
+	}
+	m_aligner->set_max_len(max_sz);
+	(*proxy_init_socket)->b_transport(trans, delay);
 }
 
 void PCIeController::b_transport_dma(tlm::tlm_generic_payload& trans, sc_time& delay)
