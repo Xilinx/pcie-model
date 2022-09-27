@@ -2212,6 +2212,10 @@ uint32_t pcie_max_read_req_size(pcie_state_t *state)
     return 512;
   case PCI_EXP_DEVCTL_READRQ_1024B:
     return 1024;
+  case PCI_EXP_DEVCTL_READRQ_2048B:
+    return 2048;
+  case PCI_EXP_DEVCTL_READRQ_4096B:
+    return 4096;
   default:
     assert(0);
   }
