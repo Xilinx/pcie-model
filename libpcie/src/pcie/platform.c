@@ -96,6 +96,7 @@ struct cosim_platform_state_s {
 
 static int live_instance_count = 0;
 
+#ifndef CONFIG_TLM
 static void pipe_read_handler(void *opaque)
 {
   cosim_platform_state_t *state = opaque;
@@ -112,6 +113,7 @@ static void pipe_read_handler(void *opaque)
     }
   }
 }
+#endif
 
 static int poll_thread_wake(cosim_platform_state_t *state)
 {
@@ -157,6 +159,7 @@ static void poll_fds_unlock(cosim_platform_state_t *state)
             strerror(rc));
 }
 
+#ifndef CONFIG_TLM
 static void *poll_thread_main(void *arg)
 {
   cosim_platform_state_t *state = arg;
@@ -251,6 +254,7 @@ static void poll_start(cosim_platform_state_t *state)
     close(state->pipe_fds[1]);
   }
 }
+#endif
 
 int cosim_set_fd_handler(cosim_platform_state_t *state,
                          int fd,
@@ -308,12 +312,13 @@ int cosim_set_fd_handler(cosim_platform_state_t *state,
 }
 
 
+#ifndef CONFIG_TLM
 static void dpi_cosim_socket_closed(void *opaque)
 {
   ERR_NOQUIT( "Cosim socket closed.  Terminating test.\n");
   cosim_finish(opaque, COSIM_EXIT_CONN_CLOSED);
 }
-
+#endif
 
 void cosim_finish(cosim_platform_state_t *state, uint32_t code)
 {

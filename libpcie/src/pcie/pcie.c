@@ -107,6 +107,7 @@ static const debug_spec debug_levels[] = {
   {"OVM_FULL", OVM_FULL}
 };
 
+#if WITH_COSIM_TLP_LOG
 static const char *tlp_log_name(int instance)
 {
   /* The result is used once just after the call. A static buffer is fine. */
@@ -124,6 +125,7 @@ static const char *tlp_log_name(int instance)
   sprintf(buffer, "cosim_tlp%d.log", instance);
   return buffer;
 }
+#endif
 
 void pcie_tlp_init(pcie_state_t *state)
 {
