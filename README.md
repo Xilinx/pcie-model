@@ -43,7 +43,7 @@ also a SystemC / TLM 2.0 PCI Express controller model using the library.
 An overview of the SystemC / TLM 2.0 PCIeController model can be seen in
 picture 1.
 
-#### Picture 1
+#### Picture 1 Overview of the [PCIeController](tlm-modules/pcie-controller.h#L40)
 ```
  PCIE Transaction                        TLM initiator sockets
       Layer           .----------------.      (BAR0-BAR5)
