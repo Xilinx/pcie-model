@@ -36,6 +36,7 @@ $ make install
 ## Create a .config.mk in the pcie-model project root dir
 
 ```
+$ cd /path/to/pcie-model
 # Replace /path/to/systemc-2.3.2 to where above was installed
 $ cat > .config.mk <<EOF
 SYSTEMC = /path/to/systemc-2.3.2
@@ -46,7 +47,7 @@ EOF
 ## Git clone libsystemctlm-soc inside the tests/tlm directory and build
 
 ```
-$ cd /patho/to/pcie-model/tests/tlm
+$ cd /path/to/pcie-model/tests/tlm
 $ git clone https://github.com/Xilinx/libsystemctlm-soc.git
 $ make
 ```
