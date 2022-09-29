@@ -96,9 +96,15 @@ The configuration is provided to the PCIeController at construction time.
 
 #### 2.3 How To Embed Into Your Project
 
-Please make sure to have the /usr/include/linux/pci_regs.h header (providing
-PCI defines) accessable on the build host. On a Ubuntu LTS system the header is
-provided by the `linux-libc-dev` package.
+Please make sure to have the <linux/pci_regs.h> and <pci/pci.h> headers in the
+default search directory list for your version of CPP on the build host. On a
+Ubuntu LTS system the headers can be installed through the `libpci-dev` and
+`linux-libc-dev` packages.
+
+```
+$ sudo apt-get install libpci-dev linux-libc-dev
+$ git submodule update --init pcie-model
+```
 
 To include and use the PCIeController model in your project you can follow the
 steps below. This assumes that you have cloned this repository in the root
