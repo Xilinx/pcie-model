@@ -104,9 +104,9 @@ To include and use the PCIeController model in your project you can follow the
 steps below. This assumes that you have cloned this repository in the root
 directory of your project.
 
-See [systemctlm-cosim-demo](https://github.com/Xilinx/systemctlm-cosim-demo)'s
-pcie/versal/cpm5-qdma-demo.cc [1] for an example project and SystemC application
-using the PCIeController model.
+See [systemctlm-cosim-demo](https://github.com/Xilinx/systemctlm-cosim-demo)'s [1]
+[pcie/versal/cpm-qdma-demo.cc](https://github.com/Xilinx/systemctlm-cosim-demo/blob/master/pcie/versal/cpm-qdma-demo.cc)
+for an example project and SystemC application using the PCIeController model.
 
 ```
 #
