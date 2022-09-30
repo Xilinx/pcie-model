@@ -80,7 +80,6 @@
 #include <sys/types.h>
 #include <sys/mman.h>
 
-#include <pci/pci.h>
 #include <linux/pci_regs.h>
 #ifndef PCI_EXT_CAP_ID_DPA
 #define PCI_EXT_CAP_ID_DPA 0x16
@@ -160,9 +159,15 @@ typedef struct fs_pci_core_resource_s {
   uint32_t region_flags[PCI_NUM_BARS];  /* As for bar_mask */
 } fs_pci_core_resource_t;
 
+struct pciedev {
+  uint8_t bus;
+  uint8_t dev;
+  uint8_t func;
+};
+
 typedef struct fs_pci_lies_s {
   pcie_func_t *func;
-  struct pci_dev pci_dev;
+  struct pciedev dev;
   pci_bar_t bars[PCI_NUM_BARS];
   fs_pci_core_resource_t *core;
 } fs_pci_lies_t;
@@ -1035,19 +1040,17 @@ static void create_lies_for_core_resource(pcie_state_t *state,
       resource->region_flags[i] = 1; /* I/O */
   }
 
-  lies->pci_dev.bus = 1;
-  lies->pci_dev.dev = rid >> 3;
-  lies->pci_dev.func = rid & 7;
-  lies->pci_dev.aux = lies;
-  lies->pci_dev.next = NULL;
+  lies->dev.bus = 1;
+  lies->dev.dev = rid >> 3;
+  lies->dev.func = rid & 7;
 
 
   func->iface = state->instance;
   func->pf_num = resource->pf;
   func->vf_num = (resource->vf != VF_NONE) ? resource->vf : -1;
-  func->bus = lies->pci_dev.bus;
-  func->dev = lies->pci_dev.dev;
-  func->func = lies->pci_dev.func;
+  func->bus = lies->dev.bus;
+  func->dev = lies->dev.dev;
+  func->func = lies->dev.func;
   func->rid = rid;
   func->config_space = resource->config_space;
 
