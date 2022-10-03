@@ -42,6 +42,7 @@
 #include "traffic-generators/random-traffic.h"
 #include "tlm-bridges/tlm2tlp-bridge.h"
 #include "soc/interconnect/iconnect.h"
+#include "tlm-modules/tlm-splitter.h"
 
 #include "test-modules/memory.h"
 #include "test-modules/utils.h"
@@ -132,6 +133,30 @@ public:
 				irq[i].write(false);
 			}
 		}
+	}
+};
+
+
+class TrafficShaper
+: public sc_core::sc_module
+{
+public:
+	tlm_utils::simple_target_socket<TrafficShaper> tgt_socket;
+	tlm_utils::simple_initiator_socket<TrafficShaper> init_socket;
+
+	TrafficShaper(sc_core::sc_module_name name) :
+		sc_module(name),
+		tgt_socket("tgt-socket"),
+		init_socket("init-socket")
+	{
+		tgt_socket.register_b_transport(this, &TrafficShaper::b_transport);
+	}
+
+	virtual void b_transport(tlm::tlm_generic_payload& trans,
+					sc_time& delay)
+	{
+		trans.set_streaming_width(trans.get_data_length());
+		init_socket->b_transport(trans, delay);
 	}
 };
 
@@ -360,7 +385,10 @@ public:
 	//
 	// For testing DMA towards host
 	//
+	tlm_splitter<2> splitter_dma;
+	TrafficShaper tshaper_dma;
 	memory host_mem;
+	memory ref_host_mem;
 
 	sc_clock clk;
 	sc_signal<bool> rst;
@@ -412,7 +440,10 @@ public:
 
 		msixdev("msixdev", NUM_MSIX),
 
+		splitter_dma("splitter_dma", true),
+		tshaper_dma("tshaper_dma"),
 		host_mem("host_mem", sc_time(0, SC_NS), RAM_SIZE),
+		ref_host_mem("ref_host_mem", sc_time(0, SC_NS), RAM_SIZE),
 
 		clk("clk", sc_time(10, SC_MS)),
 		rst("rst"),
@@ -470,8 +501,11 @@ public:
 		//
 		// Setup DMA to host memory traffic generator
 		//
-		tg_dma.socket(pcie_ctrlr.dma_tgt_socket);
+		tg_dma.socket(tshaper_dma.tgt_socket);
+		tshaper_dma.init_socket(splitter_dma.target_socket);
+		splitter_dma.i_sk[0]->bind(pcie_ctrlr.dma_tgt_socket);
 		tlm2tlp.dma_init_socket(host_mem.socket);
+		splitter_dma.i_sk[1]->bind(ref_host_mem.socket);
 
 		//
 		// Connect interrupts
