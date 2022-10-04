@@ -453,6 +453,7 @@ void sc_cosim_socket_accept_buffer(void *opaque, cosim_buffer_head *buffer)
   }
 
   tlp_dw_len = data[0] & 0x3ff;
+  tlp_dw_len = tlp_dw_len ? tlp_dw_len : 1024;
   while (data_pos < tlp_dw_len) {
     data[pos++] = request->payload[data_pos++];
   }
