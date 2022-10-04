@@ -238,6 +238,16 @@ void PCIeController::b_transport_proxy(tlm::tlm_generic_payload& trans, sc_time&
 	uint32_t max_sz = pcie_max_payload(m_pcie_state);
 	uint32_t max_rd_sz = pcie_max_read_req_size(m_pcie_state);
 
+	if (trans.get_byte_enable_length()) {
+		SC_REPORT_ERROR("PCIeController",
+				"Byte enables on DMA transactions "
+				"are currently not supported");
+	}
+	if (trans.get_streaming_width() < trans.get_data_length()) {
+		SC_REPORT_ERROR("PCIeController",
+				"Streaming width < data length on DMA "
+				"transactions are currently not supported");
+	}
 	if (trans.is_read() && max_rd_sz < max_sz) {
 		max_sz = max_rd_sz;
 	}
